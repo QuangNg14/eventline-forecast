@@ -1,0 +1,32 @@
+{
+  "artifact": "eventline-ridge-v1",
+  "event_schema": "eventline-v1",
+  "feature_schema": "hourly-asof-v1",
+  "features": [
+    "lag_1h",
+    "mean_6h",
+    "mean_24h",
+    "lag_24h",
+    "utc_hour",
+    "hours_after_noon",
+    "weekend"
+  ],
+  "horizon_s": 3600,
+  "intercept": -3.359768203319895,
+  "last_training_origin": 1738702800,
+  "max_lateness_s": 7200,
+  "ridge_lambda": 1.0,
+  "target": "units_in_[origin,origin+horizon)",
+  "training_cutoff": 1738713600,
+  "training_rows": 694,
+  "training_start": 1736208000,
+  "weights": [
+    0.29077640102610003,
+    0.3873824757736034,
+    0.26595486012713293,
+    -0.0673463050828041,
+    1.732834542754462,
+    -3.230472900267653,
+    -1.8282150895981253
+  ]
+}

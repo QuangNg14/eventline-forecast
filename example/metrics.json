@@ -1,0 +1,12 @@
+{
+  "first_test_origin": 1738713600,
+  "last_test_origin": 1739739600,
+  "model_mae": 4.573041681331119,
+  "observed_through": 1739750400,
+  "occurrence_end": 1739750400,
+  "occurrence_start": 1736121600,
+  "seasonal_mae": 8.573426573426573,
+  "test_rows": 286,
+  "training_cutoff": 1738713600,
+  "training_rows": 694
+}
