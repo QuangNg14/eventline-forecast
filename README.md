@@ -2,6 +2,8 @@
 
 Predict the units of demand in the **next hour** from synthetic, timestamped purchase events. Rust produces and replays the delivery log. Python fits a small ridge regression and serves it from a JSON file. No Cargo packages, Python packages, network service or credentials are needed to run the pipeline.
 
+On [286 held-out hours](example/metrics.json), mean absolute error was **4.57 units/hour** for ridge regression and **8.57** for the previous-day, same-hour baseline. The calendar features reflect the [generator's](ingest/synthetic.rs) afternoon peak and weekday effect. This comparison tests one synthetic series and one chronological split; it does not estimate performance on real demand.
+
 ## Reproduce locally
 
 From this directory, use Bash, a working Rust compiler (edition 2021, Rust 1.65+), and Python 3.10+. On the measured WSL Ubuntu host, Python was already present but `rustc` and a C compiler were not. The [isolated toolchain recipe](#isolated-rust-for-x86-64-wsl) covers that case. With a compiler available:
@@ -51,6 +53,10 @@ These are two header lines: the first contains **numeric values** in the file. T
 | Training | Labels must be final by the training cutoff; features still use each row's own issue time, not the cutoff. Ridge uses raw feature units, fixed penalty 1, centered columns, an unpenalized intercept and a nonnegative forecast. |
 | Evaluation | Freeze the fitted model. Advance the issue time one hour per row, allowing newly arrived history. Compare its MAE with the previous day's same-hour units known at that identical origin. No tuning or random split. |
 | Serving | The CLI loads the schema, horizon, feature order, weights and training cutoff. It calls the same `History.features` and `Model.forecast` used in evaluation. It rejects backdating and can predict at the observation boundary without looking up a label. |
+
+**Training-time leakage:** [`Model.fit`](forecast/model.py) computes features at each training hour, not at the later cutoff used to finalize labels. The [receipt-boundary test](tests/test_forecast.py) checks those lag and rolling values by hand: a past-hour event received one second after the forecast cannot count yet, and a target-hour event cannot enter history.
+
+**Inference parity:** The [CLI parity test](tests/test_pipeline.py) reloads the saved model and compares its forecasts with all 286 held-out rows. It also checks the CLI output at the first, middle, and last held-out hours. A separate test changes later receipts and confirms that an earlier forecast stays fixed.
 
 Rust trims fields, normalizes ASCII identifiers to lowercase and unsigned decimal fields to integers. For repeated IDs, occurrence and units must agree; earliest delivery wins. Conflicting facts fail the replay before it writes a result. A canonical replay sorts by first receipt, occurrence and ID. Input order, identical redelivery and later retries do not change it.
 
