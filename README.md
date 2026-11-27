@@ -1,10 +1,36 @@
 # Eventline Forecast
 
-Predict the units of demand in the **next hour** from synthetic, timestamped purchase events. Rust produces and replays the delivery log. Python fits a small ridge regression and serves it from a JSON file. No Cargo packages, Python packages, network service or credentials are needed to run the pipeline.
+Predict the **next hour** of demand from a real series of hourly Seoul bike rentals or a synthetic purchase stream. Both use the same Python ridge model, point-in-time features, previous-day baseline and JSON serving path. The synthetic stream also exercises the Rust delivery replay. No external packages, API key or hosted service are required.
 
-On [286 held-out hours](example/metrics.json), mean absolute error was **4.57 units/hour** for ridge regression and **8.57** for the previous-day, same-hour baseline. The calendar features reflect the [generator's](ingest/synthetic.rs) afternoon peak and weekday effect. This comparison tests one synthetic series and one chronological split; it does not estimate performance on real demand.
+On the **synthetic** [286 held-out hours](example/metrics.json), mean absolute error was **4.57 units/hour** for ridge regression and **8.57** for the previous-day, same-hour baseline. The calendar features reflect the [generator's](ingest/synthetic.rs) afternoon peak and weekday effect. The real series below is a separate experiment, not a combination of the two scores.
 
-## Reproduce locally
+## Real hourly series: Seoul bike rentals
+
+Source: Easwaramoorthy, S. (2020), *Seoul Bike Sharing Demand*, [UCI Machine Learning Repository](https://archive.ics.uci.edu/dataset/560/seoul+bike+sharing+demand), [DOI 10.24432/C5F62R](https://doi.org/10.24432/C5F62R), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). This adapter selects the date, hour and rental count, converts Seoul time to UTC, and derives daily partitions and lag features. Weather, holidays, service flags and future counts are not inputs. Raw and derived data stay in ignored `out/seoul/`. The [adapter](forecast/seoul.py) verifies the archive SHA-256 `139e9908f0a3544bb222386855c9ce107e96467306bb8e4ce936aab59e7baac4` on every run.
+
+```powershell
+python -B -S -m forecast.seoul
+python -B -S -m forecast.seoul --date 2018-11-01
+python -B -S -m forecast predict out/seoul/events.csv out/seoul/model-v1.json 1540998000
+```
+
+The first command downloads the archive once, rebuilds all 365 local-date partitions and evaluates the model. `--date` replaces only that day's partition; run without it to regenerate the combined model and scores. The November 1 backfill and full rerun reproduced the same partition, replay, model, held-out rows and metrics bytes.
+
+| Chronological evaluation | Result |
+|---|---:|
+| Coverage (Seoul local time, end exclusive) | Dec 1, 2017 to Dec 1, 2018: 8,760 hours |
+| Training labels final at Nov 1, 2018 00:00 KST | 8,015 |
+| Held-out origins, Nov 1 through Nov 30, one-hour horizon | 720 |
+| Ridge MAE, rentals/hour | **172.38** |
+| Previous day, same hour MAE, rentals/hour | **283.19** |
+
+These are observed rental counts, not unconstrained demand. The 295 reported zero hours are retained; they coincide with the source's non-functioning hours. The existing model uses UTC calendar features, fixed ridge penalty 1, and no holdout tuning. One city's historical month and an assumed reporting schedule do not establish live forecast accuracy.
+
+**Ingestion contract.** The CSV must contain unique column names and the three required columns. Every selected KST date must have all 24 integer hours (0–23), each with an unsigned integer count below 2³². Identical `(date, hour, count)` repeats collapse. Out-of-order rows, including earlier dates encountered later in the file, are counted and sorted into their occurrence partition. A conflicting count, bad field, missing hour, or stale final hour writes an explanation to `quarantine.jsonl` and fails the backfill before replacing partitions. A schema or archive-checksum mismatch stops before row processing. Freshness here means the greatest valid observation reaches the last hour of the **requested archive range**, not today's date. Partitions replace atomically per date; use one backfill writer.
+
+**Availability assumption.** UCI does not provide original arrival timestamps. The backtest treats each hourly total as observable at hour close, never earlier: a nonzero aggregate is encoded at the last second of its hour with receipt one second later. The existing mature-label rule adds its conservative one-second margin after close; the terminal snapshot is one second past the last close. A zero is omitted from the sparse replay only after the partition contract proves the source supplied that hour. Missing hours never become zeros. This tests historical, as-of forecasting under that assumption, not live late-delivery behavior.
+
+## Reproduce the synthetic stream locally
 
 From this directory, use Bash, a working Rust compiler (edition 2021, Rust 1.65+), and Python 3.10+. On the measured WSL Ubuntu host, Python was already present but `rustc` and a C compiler were not. The [isolated toolchain recipe](#isolated-rust-for-x86-64-wsl) covers that case. With a compiler available:
 
